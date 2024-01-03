@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Home</title>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+</head>
+<body>
+    <h1>Welcome to the Home Page</h1>
+    <video id="video" width="640" height="480" autoplay></video>
+    <div id="results"></div>
+
+    <script>
+        // Mendapatkan elemen video dan div hasil
+        var video = document.getElementById('video');
+        var resultsDiv = $('#results');
+
+        // Mengakses kamera melalui browser
+        if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+            navigator.mediaDevices.getUserMedia({ video: true })
+                .then(function(stream) {
+                    video.srcObject = stream;
+
+                    // Memulai deteksi wajah setiap kali ada frame baru dari video
+                    video.addEventListener('play', detectFaces);
+                })
+                .catch(function(error) {
+                    console.error('Error accessing camera:', error);
+                });
+        }
+
+        function detectFaces() {
+            // Membuat elemen canvas untuk menggambar frame video
+            var canvas = document.createElement('canvas');
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            var context = canvas.getContext('2d');
+
+            // Mendeteksi wajah pada setiap frame
+            function detect() {
+                if (video.paused || video.ended) {
+                    return;
+                }
+
+                // Menggambar frame video pada canvas
+                context.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+                // Mengambil gambar dari canvas
+                canvas.toBlob(function(blob) {
+                    var formData = new FormData();
+                    formData.append('image', blob, 'image.jpg');
+
+                    // Mengirim gambar ke server untuk deteksi wajah
+                    $.ajax({
+                        url: '/detect_faces',
+                        type: 'POST',
+                        data: formData,
+                        processData: false,
+                        contentType: false,
+                        success: function(response) {
+                            displayResults(response);
+
+                            // Memanggil fungsi detect wajah pada frame berikutnya
+                            requestAnimationFrame(detect);
+                        }
+                    });
+                }, 'image/jpeg');
+            }
+
+            // Memanggil fungsi detect wajah untuk pertama kali
+            detect();
+        }
+
+        function displayResults(results) {
+            resultsDiv.empty();
+
+            if (results.length > 0) {
+                resultsDiv.append('<h2>Results:</h2>');
+
+                for (var i = 0; i < results.length; i++) {
+                    var result = results[i];
+                    var name = result.name;
+                    var similarity = result.similarity.toFixed(2);
+                    var location = result.location;
+
+                    var resultString = 'Name: ' + name + ', Similarity: ' + similarity;
+                    resultsDiv.append('<p>' + resultString + '</p>');
+                    resultsDiv.append('<img src="data:image/jpeg;base64,' + location + '">');
+
+                    if (similarity > 70) {
+                        // Menutup halaman saat similarity > 70
+                        window.close();
+                    }
+                }
+            } else {
+                resultsDiv.append('<p>Wajah tidak ditemukan.</p>');
+            }
+        }
+    </script>
+</body>
+</html>
